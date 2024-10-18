@@ -9,3 +9,4 @@ beautifulsoup4==4.12.2
 Pillow==9.5.0
 numpy==1.24.3
 bs4==0.0.1  # Sometimes required when using BeautifulSoup
+gunicorn==21.2.0
