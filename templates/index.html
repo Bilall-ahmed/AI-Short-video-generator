@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Latest News</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            text-align: center;
+        }
+        .news-article {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin: 10px auto;
+            width: 300px;
+        }
+        .news-article img {
+            max-width: 100%;
+        }
+        .generated-description,
+        .generated-images,
+        .generated-collages,
+        .video-container {
+            margin-top: 20px;
+            border: 1px solid #ddd;
+            padding: 10px;
+            width: 400px;
+            margin: 0 auto;
+            text-align: left;
+        }
+        .image-container img,
+        .collage-container img {
+            max-width: 100px;
+            margin: 5px;
+        }
+        .collage-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>Latest News</h1>
+    {% if news_article %}
+    <div class="news-article">
+        <img src="{{ news_article.urlToImage or 'https://via.placeholder.com/300' }}" alt="{{ news_article.title }}">
+        <h3>{{ news_article.title }}</h3>
+        <p>{{ news_article.description or 'No description available' }}</p>
+        <button class="generate-btn" data-title="{{ news_article.title }}">Generate Detailed Description</button>
+        <button class="fetch-images-btn" data-title="{{ news_article.title }}">Fetch Images</button>
+        <div class="generated-description" id="description"></div>
+        <div class="generated-images" id="images"></div>
+        <button class="create-collage-btn" style="display: none;">Create Collage</button>
+        <div class="generated-collages" id="collages"></div>
+        <button class="generate-video-btn" style="display: none;">Generate Video</button>
+        <div class="video-container" id="video"></div>
+    </div>
+    {% else %}
+    <p>No news articles available.</p>
+    {% endif %}
+
+    <script>
+        let fetchedImages = [];
+        let audioFile = ''; // Store the audio file URL
+    
+        document.querySelector('.generate-btn').addEventListener('click', async () => {
+            const inputSentence = document.querySelector('.generate-btn').getAttribute('data-title');
+            const descriptionDiv = document.getElementById('description');
+    
+            if (!inputSentence) {
+                descriptionDiv.innerText = 'Please enter a sentence.';
+                return;
+            }
+    
+            const response = await fetch('/generate-description', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ input_sentence: inputSentence }),
+            });
+    
+            const data = await response.json();
+            if (response.ok) {
+                descriptionDiv.innerText = data.description;
+                const audioButton = document.createElement('button');
+                audioButton.innerText = 'Generate Audio';
+                audioButton.classList.add('audio-btn');
+                descriptionDiv.appendChild(audioButton);
+    
+                audioButton.addEventListener('click', async () => {
+                    const audioResponse = await fetch('/generate-audio', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ description: data.description }),
+                    });
+    
+                    const audioData = await audioResponse.json();
+                    if (audioResponse.ok) {
+                        audioFile = audioData.audio_url; // Store the generated audio URL
+                        const audioElement = document.createElement('audio');
+                        audioElement.controls = true;
+                        audioElement.src = audioFile;
+                        descriptionDiv.appendChild(audioElement);
+                        
+                        // Enable the generate video button
+                        document.querySelector('.generate-video-btn').style.display = 'block'; 
+                    } else {
+                        descriptionDiv.innerText += ` Error: ${audioData.error}`;
+                    }
+                });
+            } else {
+                descriptionDiv.innerText = `Error: ${data.error}`;
+            }
+        });
+    
+        document.querySelector('.fetch-images-btn').addEventListener('click', async () => {
+            const query = document.querySelector('.fetch-images-btn').getAttribute('data-title');
+            const imagesDiv = document.getElementById('images');
+    
+            if (!query) {
+                imagesDiv.innerText = 'Please enter a title.';
+                return;
+            }
+    
+            const response = await fetch('/fetch-images', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ query: query }),
+            });
+    
+            const data = await response.json();
+            if (response.ok) {
+                imagesDiv.innerHTML = '';
+                fetchedImages = data.images; // Store fetched images
+                fetchedImages.forEach(imageUrl => {
+                    const img = document.createElement('img');
+                    img.src = imageUrl;
+                    imagesDiv.appendChild(img);
+                });
+                // Show the create collage button
+                document.querySelector('.create-collage-btn').style.display = 'block';
+            } else {
+                imagesDiv.innerText = `Error: ${data.error}`;
+            }
+        });
+    
+        document.querySelector('.create-collage-btn').addEventListener('click', async () => {
+            const response = await fetch('/create-collage', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ images: fetchedImages }),
+            });
+    
+            const data = await response.json();
+            const collagesDiv = document.getElementById('collages');
+    
+            if (response.ok) {
+                collagesDiv.innerHTML = '';
+                data.collageUrls.forEach(collageUrl => {
+                    const img = document.createElement('img');
+                    img.src = collageUrl;
+                    collagesDiv.appendChild(img);
+                });
+                // Show the generate video button only if audio is generated
+                document.querySelector('.generate-video-btn').style.display = 'block';
+            } else {
+                collagesDiv.innerText = `Error: ${data.error}`;
+            }
+        });
+    
+        document.querySelector('.generate-video-btn').addEventListener('click', async () => {
+            const response = await fetch('/generate-video', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ 
+                    collages: [...document.querySelectorAll('.generated-collages img')].map(img => img.src), 
+                    audio_file: audioFile // Pass the generated audio file URL
+                }),
+            });
+    
+            const data = await response.json();
+            const videoDiv = document.getElementById('video');
+    
+            if (response.ok) {
+                videoDiv.innerHTML = '';
+                const videoElement = document.createElement('video');
+                videoElement.controls = true;
+                videoElement.src = data.video_url;
+                videoElement.width = 400; // Set video width
+                videoDiv.appendChild(videoElement);
+            } else {
+                videoDiv.innerText = `Error: ${data.error}`;
+            }
+        });
+    </script>
+    
+</body>
+</html>
